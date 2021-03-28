@@ -1,5 +1,6 @@
 #![feature(proc_macro_hygiene, decl_macro)]
 
+extern crate argon2;
 #[macro_use]
 extern crate rocket;
 #[macro_use]
@@ -20,7 +21,7 @@ use rocket::response::{self, Responder, Response};
 use rocket::State;
 use rocket_contrib::json::{Json, JsonValue};
 
-use store::{TreeStore, ID};
+use store::{TreeStore, User, ID};
 
 type SharedTreeStore = Mutex<TreeStore>;
 
@@ -37,7 +38,7 @@ struct ErrRes {
 impl From<&str> for ErrRes {
     fn from(error: &str) -> Self {
         ErrRes {
-            error: String::from(error),
+            error: error.to_string(),
         }
     }
 }
@@ -70,16 +71,16 @@ fn signup(req: Json<SignupReq>, store: State<SharedTreeStore>) -> Result<Json<Si
         return Err(ErrRes::from("email exists"));
     }
 
-    // TODO: Check if email exists
     let id = TreeStore::make_id(&req.email);
-    //let mut store = store.lock().expect("can't lock");
-    //store.0 += 1;
-    // TODO: Save to store.emails
-    // TODO: Create user
-    // TODO: Save to store.users
-    Ok(Json(SignupRes {
+    let user = User::new(&req.password);
+
+    store.emails.insert(req.email.clone(), id);
+    store.users.insert(id, user);
+
+    let res = SignupRes {
         token: Token { id },
-    }))
+    };
+    Ok(Json(res))
 }
 
 #[derive(Deserialize)]
@@ -94,43 +95,77 @@ struct LoginRes {
 }
 
 #[post("/login", format = "json", data = "<req>")]
-fn login(req: Json<LoginReq>, store: State<SharedTreeStore>) -> Json<LoginRes> {
-    //let mut store = store.lock().expect("can't lock");
-    //store.0 += 1;
+fn login(req: Json<LoginReq>, store: State<SharedTreeStore>) -> Result<Json<LoginRes>, ErrRes> {
+    let store = store.lock().expect("can't lock");
 
-    // TODO: Don't use make_id here, look it up in store.emails
-    // TODO: If not found in store.emails, return an error
-    let id = TreeStore::make_id(&req.email);
+    if !store.emails.contains_key(&req.email) {
+        return Err(ErrRes::from("no such user"));
+    }
 
-    // TODO: Verify password
+    let id = store.emails.get(&req.email).unwrap().clone();
+    let user = store.users.get(&id).unwrap();
 
-    Json(LoginRes {
+    if !user.verify_pw(&req.password) {
+        return Err(ErrRes::from("password doesn't match"));
+    }
+
+    let res = LoginRes {
         token: Token { id },
-    })
+    };
+    Ok(Json(res))
 }
 
 #[derive(Deserialize)]
 struct GetTasksReq {
-    token: String,
-    tasks: JsonValue,
-}
-
-#[get("/", format = "json", data = "<req>")]
-fn get_tasks(req: Json<GetTasksReq>, store: State<SharedTreeStore>) {}
-
-#[derive(Deserialize)]
-struct PostTasksReq {
     token: Token,
 }
 
 #[derive(Serialize)]
-struct PostTasksRes {
-    tasks: JsonValue,
+struct GetTasksRes {
+    tasks: serde_json::Value,
+}
+
+#[get("/", format = "json", data = "<req>")]
+fn get_tasks(
+    req: Json<GetTasksReq>,
+    store: State<SharedTreeStore>,
+) -> Result<Json<GetTasksRes>, ErrRes> {
+    let store = store.lock().expect("can't lock");
+
+    let id = req.token.id;
+
+    if !store.users.contains_key(&id) {
+        return Err(ErrRes::from("invalid token"));
+    }
+
+    if !store.tasks.contains_key(&id) {
+        return Err(ErrRes::from("no tasks"));
+    }
+    let tasks = store.tasks.get(&id).unwrap().clone();
+
+    let res = GetTasksRes { tasks };
+    Ok(Json(res))
+}
+
+#[derive(Deserialize)]
+struct PostTasksReq {
+    token: Token,
+    tasks: serde_json::Value,
 }
 
 #[post("/", format = "json", data = "<req>")]
-fn post_tasks(req: Json<PostTasksReq>, store: State<SharedTreeStore>) -> Json<PostTasksRes> {
-    Json(PostTasksRes { tasks: json!(0) })
+fn post_tasks(req: Json<PostTasksReq>, store: State<SharedTreeStore>) -> Result<String, ErrRes> {
+    let mut store = store.lock().expect("can't lock");
+
+    let id = req.token.id;
+
+    if !store.users.contains_key(&id) {
+        return Err(ErrRes::from("invalid token"));
+    }
+
+    let tasks = store.tasks.insert(id, req.tasks.clone());
+
+    Ok("".to_string())
 }
 
 #[catch(400)]

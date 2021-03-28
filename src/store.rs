@@ -3,13 +3,15 @@ use std::collections::HashMap;
 use std::hash::Hasher;
 use std::vec::Vec;
 
+use argon2;
+
 pub type ID = u64;
 pub type Email = String;
 
 pub struct TreeStore {
     pub emails: HashMap<Email, ID>,
     pub users: HashMap<ID, User>,
-    pub contents: HashMap<ID, Vec<u8>>,
+    pub tasks: HashMap<ID, serde_json::Value>,
 }
 
 impl TreeStore {
@@ -17,7 +19,7 @@ impl TreeStore {
         TreeStore {
             emails: HashMap::<Email, ID>::new(),
             users: HashMap::<ID, User>::new(),
-            contents: HashMap::<ID, Vec<u8>>::new(),
+            tasks: HashMap::<ID, serde_json::Value>::new(),
         }
     }
 
@@ -30,8 +32,20 @@ impl TreeStore {
     }
 }
 
+const SALT: &[u8] = b"tree-tap";
+
 pub struct User {
-    id: ID,
-    pwhash: Vec<u8>,
-    pwsalt: Vec<u8>,
+    pub pwhash: String,
+}
+
+impl User {
+    pub fn new(password: &str) -> User {
+        let config = argon2::Config::default();
+        let pwhash = argon2::hash_encoded(password.as_bytes(), SALT, &config).unwrap();
+        User { pwhash }
+    }
+
+    pub fn verify_pw(&self, password: &str) -> bool {
+        argon2::verify_encoded(&self.pwhash, password.as_bytes()).unwrap()
+    }
 }
