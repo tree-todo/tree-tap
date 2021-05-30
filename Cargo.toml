@@ -8,8 +8,9 @@ edition = "2018"
 
 [dependencies]
 diesel = "1.4.6"
-rocket = "0.4.7"
-rocket_contrib = "0.4.7"
+rocket = "0.4.10"
+rocket_contrib = "0.4.10"
+rocket_cors = "0.5.1"
 rust-argon2 = "0.8.3"
 serde = "1.0.125"
 serde_derive = "1.0.125"

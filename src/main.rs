@@ -5,6 +5,7 @@ extern crate argon2;
 extern crate rocket;
 #[macro_use]
 extern crate rocket_contrib;
+extern crate rocket_cors;
 #[macro_use]
 extern crate serde_derive;
 
@@ -189,7 +190,10 @@ fn internal_server_error() -> ErrRes {
 }
 
 fn rocket() -> rocket::Rocket {
+    let default = rocket_cors::CorsOptions::default();
+    let cors = default.to_cors().unwrap();
     rocket::ignite()
+        .attach(cors)
         .mount("/", routes![signup, login])
         .mount("/tasks", routes![get_tasks, post_tasks])
         .register(catchers![
