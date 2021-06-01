@@ -1088,6 +1088,7 @@ checksum = "efd1f82c56340fdf16f2a953d7bda4f8fdffba13d93b00844c25572110b26079"
 name = "tree-tap"
 version = "0.1.0"
 dependencies = [
+ "base64 0.13.0",
  "diesel",
  "rocket",
  "rocket_contrib",
